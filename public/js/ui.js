@@ -77,6 +77,11 @@ const UI = (() => {
     grid.dataset.count = count;
   }
 
+  function setSpeaking(id, speaking) {
+    const tile = tiles.get(id);
+    if (tile) tile.classList.toggle('speaking', speaking);
+  }
+
   // message: string shows an overlay, null hides it, undefined leaves it unchanged.
   function setConnecting(id, message) {
     const tile = tiles.get(id);
@@ -126,6 +131,7 @@ const UI = (() => {
     setAudioEnabled,
     setToggleState,
     setConnecting,
+    setSpeaking,
     updateLayout,
     toast,
     initials,

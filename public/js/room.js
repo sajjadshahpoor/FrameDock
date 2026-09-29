@@ -129,6 +129,7 @@
     const peer = state.peers.get(id);
     state.peers.delete(id);
     Peers.remove(id);
+    AudioLevel.unwatch(id);
     UI.removeTile(id);
     refreshCount();
     refreshInviteCard();
@@ -170,6 +171,7 @@
       const track = await Media.getMicrophoneTrack();
       state.localStream.addTrack(track);
       await Peers.setTrack('audio', track, state.localStream);
+      if (state.joined) AudioLevel.watch('local', state.localStream);
       return true;
     } catch (err) {
       UI.toast(MIC_MESSAGES[Media.describeError(err)]);
@@ -404,6 +406,8 @@
 
     UI.addTile('local', { name, isLocal: true });
     refreshLocalPreview();
+    AudioLevel.init({ onChange: (id, speaking) => UI.setSpeaking(id, speaking) });
+    AudioLevel.watch('local', state.localStream);
     startSession(response);
   }
 
@@ -423,6 +427,7 @@
           if (!peer) return;
           peer.stream = stream;
           UI.setStream(id, stream);
+          AudioLevel.watch(id, stream);
           refreshRemoteVideo(id);
         },
         state: (id, connectionState) => {
@@ -465,6 +470,7 @@
     Peers.closeAll();
     Array.from(state.peers.keys()).forEach((id) => {
       state.peers.delete(id);
+      AudioLevel.unwatch(id);
       UI.removeTile(id);
     });
 

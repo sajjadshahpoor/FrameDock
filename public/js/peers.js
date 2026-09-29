@@ -35,6 +35,28 @@ const Peers = (() => {
     return 'inactive';
   }
 
+  // In a mesh every participant uploads one copy of their video per peer, so the
+  // per-connection budget has to shrink as the room grows.
+  function videoBudget(peerCount) {
+    if (peerCount <= 1) return { maxBitrate: 1_500_000, scaleResolutionDownBy: 1 };
+    if (peerCount <= 3) return { maxBitrate: 600_000, scaleResolutionDownBy: 1.5 };
+    return { maxBitrate: 300_000, scaleResolutionDownBy: 2 };
+  }
+
+  function applyBitrateLimits() {
+    const budget = videoBudget(connections.size);
+    for (const { pc } of connections.values()) {
+      pc.getSenders()
+        .filter((sender) => sender.track && sender.track.kind === 'video')
+        .forEach((sender) => {
+          const params = sender.getParameters();
+          if (!params.encodings || params.encodings.length === 0) return; // not negotiated yet
+          params.encodings.forEach((encoding) => Object.assign(encoding, budget));
+          sender.setParameters(params).catch(() => {});
+        });
+    }
+  }
+
   // Changing a transceiver's direction triggers renegotiation, which tells the other
   // side to stop (or resume) sending. This is what actually saves bandwidth.
   function applyVideoDirection(pc) {
@@ -88,6 +110,7 @@ const Peers = (() => {
 
     pc.onconnectionstatechange = () => {
       emit('state', id, pc.connectionState);
+      if (pc.connectionState === 'connected') applyBitrateLimits();
       if (pc.connectionState === 'failed') pc.restartIce();
     };
 
@@ -152,6 +175,7 @@ const Peers = (() => {
     }
 
     await Promise.allSettled(jobs);
+    if (kind === 'video' && track) applyBitrateLimits();
   }
 
   function setReceiveVideo(enabled) {
@@ -164,6 +188,7 @@ const Peers = (() => {
     if (!peer) return;
     peer.pc.close();
     connections.delete(id);
+    applyBitrateLimits();
   }
 
   function closeAll() {
