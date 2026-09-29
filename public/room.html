@@ -12,7 +12,65 @@
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body class="room">
-  <div id="call-screen" class="call">
+  <!-- Pre-join: check camera/mic, pick a name, choose video or audio-only -->
+  <section id="prejoin" class="prejoin">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <img src="/img/logo.svg" alt="" width="28" height="28">
+        <span>FrameDock</span>
+      </a>
+    </header>
+
+    <div class="prejoin-body">
+      <div class="prejoin-preview">
+        <div id="preview-tile" class="tile local video-off">
+          <video id="preview-video" autoplay playsinline muted></video>
+          <div class="avatar"><span class="avatar-initials" id="preview-initials">?</span></div>
+          <div id="preview-status" class="preview-status">Starting camera...</div>
+          <div class="preview-controls">
+            <button class="ctrl" type="button" data-action="mic" title="Turn off microphone">
+              <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+              <svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 11h-2c0 .74-.16 1.43-.43 2.05l1.23 1.23A6.9 6.9 0 0 0 19 11zm-4.02.17L9 5.18V5a3 3 0 0 1 6 0v6c0 .06-.01.11-.02.17zM4.27 3 3 4.27l6 6V11a3 3 0 0 0 4.52 2.58l1.66 1.66A4.98 4.98 0 0 1 7 11H5a7 7 0 0 0 6 6.92V21h2v-3.08a6.9 6.9 0 0 0 3.54-1.4L19.73 21 21 19.73 4.27 3z"/></svg>
+              <span class="sr-only">Microphone</span>
+            </button>
+            <button class="ctrl" type="button" data-action="cam" title="Turn off camera">
+              <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+              <svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6.5l-4 4V7a1 1 0 0 0-1-1H9.82L21 17.18V6.5zM3.27 2 2 3.27 4.73 6H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12c.21 0 .39-.08.55-.18L19.73 21 21 19.73 3.27 2z"/></svg>
+              <span class="sr-only">Camera</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <form id="prejoin-form" class="prejoin-panel" autocomplete="on">
+        <h1>Ready to join?</h1>
+        <p id="room-status" class="room-status">Checking who's here...</p>
+
+        <label class="field-label" for="display-name">Your name</label>
+        <input id="display-name" class="input" type="text" name="name" maxlength="40" placeholder="What should people call you?" required>
+
+        <div class="prejoin-actions">
+          <button id="join-now" class="btn btn-primary btn-lg" type="submit">Join now</button>
+          <button id="join-audio" class="btn btn-secondary btn-lg" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v7a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5v-1a7 7 0 0 1 14 0v1h-2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-7a9 9 0 0 0-9-9z"/></svg>
+            Join with audio only
+          </button>
+        </div>
+        <p class="hint">Audio only uses much less data and works better on slow connections.</p>
+
+        <div class="share-row">
+          <span class="share-code" id="prejoin-code"></span>
+          <button class="btn btn-ghost" type="button" data-action="invite">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>
+            Copy invite link
+          </button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- In-call -->
+  <div id="call-screen" class="call" hidden>
     <header class="call-header">
       <a class="brand" href="/" title="FrameDock home">
         <img src="/img/logo.svg" alt="" width="24" height="24">
@@ -20,20 +78,36 @@
       <span id="room-code" class="room-code"></span>
       <span id="audio-only-badge" class="badge" hidden>Audio only</span>
       <span id="participant-count" class="participant-count"></span>
+      <button class="btn btn-secondary header-btn" type="button" data-action="invite" title="Share invite link">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        <span class="header-btn-label">Invite</span>
+      </button>
     </header>
 
     <main class="stage">
       <div id="video-grid" class="video-grid" aria-live="polite"></div>
+
+      <aside id="invite-card" class="invite-card" hidden>
+        <button id="invite-close" class="icon-btn" type="button" title="Close">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+        <h2>Your meeting is ready</h2>
+        <p>Share this link with the people you want in the call.</p>
+        <div class="invite-link">
+          <span id="invite-url"></span>
+        </div>
+        <button class="btn btn-primary" type="button" data-action="invite">Copy link</button>
+      </aside>
     </main>
 
     <footer class="control-bar">
       <div class="controls">
-        <button id="toggle-mic" class="ctrl" type="button" aria-pressed="true" title="Turn off microphone">
+        <button id="toggle-mic" class="ctrl" type="button" data-action="mic" aria-pressed="true" title="Turn off microphone">
           <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
           <svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 11h-2c0 .74-.16 1.43-.43 2.05l1.23 1.23A6.9 6.9 0 0 0 19 11zm-4.02.17L9 5.18V5a3 3 0 0 1 6 0v6c0 .06-.01.11-.02.17zM4.27 3 3 4.27l6 6V11a3 3 0 0 0 4.52 2.58l1.66 1.66A4.98 4.98 0 0 1 7 11H5a7 7 0 0 0 6 6.92V21h2v-3.08a6.9 6.9 0 0 0 3.54-1.4L19.73 21 21 19.73 4.27 3z"/></svg>
           <span class="sr-only">Microphone</span>
         </button>
-        <button id="toggle-cam" class="ctrl" type="button" aria-pressed="true" title="Turn off camera">
+        <button id="toggle-cam" class="ctrl" type="button" data-action="cam" aria-pressed="true" title="Turn off camera">
           <svg class="icon-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
           <svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6.5l-4 4V7a1 1 0 0 0-1-1H9.82L21 17.18V6.5zM3.27 2 2 3.27 4.73 6H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12c.21 0 .39-.08.55-.18L19.73 21 21 19.73 3.27 2z"/></svg>
           <span class="sr-only">Camera</span>

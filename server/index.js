@@ -25,6 +25,20 @@ app.get('/config', (req, res) => {
   res.json({ iceServers: getIceServers(), maxParticipants: rooms.MAX_PARTICIPANTS });
 });
 
+// Lets the pre-join screen show who is already in the call.
+app.get('/api/rooms/:code', (req, res) => {
+  const code = req.params.code.toLowerCase();
+  if (!ROOM_CODE_PATTERN.test(code)) {
+    return res.status(400).json({ error: 'invalid-room' });
+  }
+  const participants = rooms.getParticipants(code);
+  res.json({
+    count: participants.length,
+    names: participants.slice(0, 3).map((p) => p.name),
+    full: participants.length >= rooms.MAX_PARTICIPANTS,
+  });
+});
+
 app.get('/room/:code', (req, res) => {
   const code = req.params.code.toLowerCase();
   if (!ROOM_CODE_PATTERN.test(code)) {

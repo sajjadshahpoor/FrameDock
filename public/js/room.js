@@ -1,14 +1,25 @@
 (() => {
   const roomCode = window.location.pathname.split('/').pop();
+  const inviteUrl = `${window.location.origin}/room/${roomCode}`;
   const params = new URLSearchParams(window.location.search);
-  const micBtn = document.getElementById('toggle-mic');
-  const camBtn = document.getElementById('toggle-cam');
-  const audioOnlyBtn = document.getElementById('toggle-audio-only');
-  const leaveBtn = document.getElementById('leave-call');
-  const countLabel = document.getElementById('participant-count');
-  const audioOnlyBadge = document.getElementById('audio-only-badge');
+  const NAME_KEY = 'framedock:name';
+
+  const $ = (id) => document.getElementById(id);
+  const prejoin = $('prejoin');
+  const callScreen = $('call-screen');
+  const nameInput = $('display-name');
+  const previewTile = $('preview-tile');
+  const previewVideo = $('preview-video');
+  const previewStatus = $('preview-status');
+  const audioOnlyBtn = $('toggle-audio-only');
+  const countLabel = $('participant-count');
+  const inviteCard = $('invite-card');
+  const micButtons = document.querySelectorAll('[data-action="mic"]');
+  const camButtons = document.querySelectorAll('[data-action="cam"]');
 
   const state = {
+    name: '',
+    joined: false,
     localStream: new MediaStream(),
     micOn: false,
     camOn: false,
@@ -17,21 +28,18 @@
     peers: new Map(), // id -> { name, media, stream }
   };
 
-  document.getElementById('room-code').textContent = roomCode;
+  let previewReady = Promise.resolve();
+
+  $('room-code').textContent = roomCode;
+  $('prejoin-code').textContent = roomCode;
+  $('invite-url').textContent = inviteUrl;
   document.title = `${roomCode} - FrameDock`;
 
   const CAMERA_MESSAGES = {
-    'permission-denied': 'Camera permission was blocked. You joined with audio only.',
-    'not-found': 'No camera found. You joined with audio only.',
-    'in-use': 'Your camera is being used by another app. You joined with audio only.',
-    unknown: 'Camera unavailable. You joined with audio only.',
-  };
-
-  const CAMERA_RETRY_MESSAGES = {
-    'permission-denied': 'Camera permission is blocked. Allow it in your browser settings.',
-    'not-found': 'No camera found.',
+    'permission-denied': 'Camera permission was blocked. You can still join with audio.',
+    'not-found': 'No camera found. You can still join with audio.',
     'in-use': 'Your camera is being used by another app.',
-    unknown: 'Could not start your camera.',
+    unknown: 'Camera unavailable. You can still join with audio.',
   };
 
   const MIC_MESSAGES = {
@@ -41,45 +49,41 @@
     unknown: 'Microphone unavailable.',
   };
 
+  // ---------- Rendering ----------
+
   function refreshCount() {
     const total = state.peers.size + 1;
     countLabel.textContent = total === 1 ? 'Only you' : `${total} people`;
   }
 
   function refreshControls() {
-    UI.setToggleState(micBtn, state.micOn, { on: 'Turn off microphone', off: 'Turn on microphone' });
-    UI.setToggleState(camBtn, state.camOn, { on: 'Turn off camera', off: 'Turn on camera' });
+    const micLabels = { on: 'Turn off microphone', off: 'Turn on microphone' };
+    const camLabels = { on: 'Turn off camera', off: 'Turn on camera' };
+    micButtons.forEach((btn) => UI.setToggleState(btn, state.micOn, micLabels));
+    camButtons.forEach((btn) => {
+      UI.setToggleState(btn, state.camOn, camLabels);
+      btn.disabled = state.joined && state.audioOnly;
+    });
+
     audioOnlyBtn.classList.toggle('active', state.audioOnly);
     audioOnlyBtn.setAttribute('aria-pressed', String(state.audioOnly));
     audioOnlyBtn.title = state.audioOnly ? 'Turn video back on' : 'Switch to audio-only mode';
-    camBtn.disabled = state.audioOnly;
-    audioOnlyBadge.hidden = !state.audioOnly;
+    $('audio-only-badge').hidden = !state.audioOnly;
+
+    previewTile.classList.toggle('video-off', !state.camOn);
+    previewStatus.hidden = state.camOn;
+    if (!state.camOn) previewStatus.textContent = state.audioOnly ? 'Audio only' : 'Camera is off';
+
     UI.setAudioEnabled('local', state.micOn);
     UI.setVideoEnabled('local', state.camOn);
   }
 
-  function publishMediaState() {
-    Signaling.sendMediaState({ audio: state.micOn, video: state.camOn });
-  }
-
   function refreshLocalPreview() {
-    // A fresh MediaStream makes the <video> element pick up added/removed tracks reliably.
-    UI.setStream('local', new MediaStream(state.localStream.getVideoTracks()));
-  }
-
-  function addPeer(peer) {
-    state.peers.set(peer.id, { name: peer.name, media: peer.media, stream: null });
-    UI.addTile(peer.id, { name: peer.name });
-    UI.setAudioEnabled(peer.id, peer.media.audio);
-    UI.setVideoEnabled(peer.id, false);
-    refreshCount();
-  }
-
-  function removePeer(id) {
-    state.peers.delete(id);
-    Peers.remove(id);
-    UI.removeTile(id);
-    refreshCount();
+    // A fresh MediaStream makes <video> elements pick up added/removed tracks reliably.
+    const videoOnly = new MediaStream(state.localStream.getVideoTracks());
+    previewVideo.srcObject = videoOnly;
+    previewVideo.play().catch(() => {});
+    UI.setStream('local', videoOnly);
   }
 
   function refreshRemoteVideo(id) {
@@ -89,13 +93,33 @@
     UI.setVideoEnabled(id, !state.audioOnly && peer.media.video && hasLiveVideo);
   }
 
-  async function loadConfig() {
-    try {
-      const res = await fetch('/config');
-      return await res.json();
-    } catch {
-      return { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-    }
+  function refreshInviteCard() {
+    inviteCard.hidden = !state.joined || state.peers.size > 0 || inviteCard.dataset.dismissed === 'true';
+  }
+
+  function publishMediaState() {
+    if (state.joined) Signaling.sendMediaState({ audio: state.micOn, video: state.camOn });
+  }
+
+  // ---------- Participants ----------
+
+  function addPeer(peer) {
+    state.peers.set(peer.id, { name: peer.name, media: peer.media, stream: null });
+    UI.addTile(peer.id, { name: peer.name });
+    UI.setAudioEnabled(peer.id, peer.media.audio);
+    UI.setVideoEnabled(peer.id, false);
+    refreshCount();
+    refreshInviteCard();
+  }
+
+  function removePeer(id) {
+    const peer = state.peers.get(id);
+    state.peers.delete(id);
+    Peers.remove(id);
+    UI.removeTile(id);
+    refreshCount();
+    refreshInviteCard();
+    if (peer) UI.toast(`${peer.name} left the call`, { duration: 2500 });
   }
 
   // ---------- Camera / microphone ----------
@@ -105,15 +129,14 @@
     try {
       track = await Media.getCameraTrack();
     } catch (err) {
-      UI.toast(CAMERA_RETRY_MESSAGES[Media.describeError(err)]);
-      return false;
+      UI.toast(CAMERA_MESSAGES[Media.describeError(err)]);
+      return;
     }
     state.localStream.addTrack(track);
     track.addEventListener('ended', () => withLock(stopCamera));
     await Peers.setTrack('video', track, state.localStream);
     state.camOn = true;
     refreshLocalPreview();
-    return true;
   }
 
   async function stopCamera() {
@@ -152,40 +175,85 @@
     }
   }
 
-  micBtn.addEventListener('click', () =>
-    withLock(async () => {
-      const track = state.localStream.getAudioTracks()[0];
-      if (!track) {
-        state.micOn = await startMicrophone();
-        return;
-      }
-      state.micOn = !state.micOn;
-      track.enabled = state.micOn;
-    })
+  async function setAudioOnly(enabled) {
+    state.audioOnly = enabled;
+    if (enabled && state.camOn) await stopCamera();
+    Peers.setReceiveVideo(!enabled);
+    state.peers.forEach((_, id) => refreshRemoteVideo(id));
+  }
+
+  micButtons.forEach((btn) =>
+    btn.addEventListener('click', () =>
+      withLock(async () => {
+        const track = state.localStream.getAudioTracks()[0];
+        if (!track) {
+          state.micOn = await startMicrophone();
+          return;
+        }
+        state.micOn = !state.micOn;
+        track.enabled = state.micOn;
+      })
+    )
   );
 
-  camBtn.addEventListener('click', () =>
-    withLock(async () => {
-      if (state.camOn) await stopCamera();
-      else await startCamera();
-    })
+  camButtons.forEach((btn) =>
+    btn.addEventListener('click', () =>
+      withLock(async () => {
+        if (state.camOn) {
+          await stopCamera();
+        } else {
+          // Turning the camera on before joining means the user wants video after all.
+          if (!state.joined) state.audioOnly = false;
+          await startCamera();
+        }
+      })
+    )
   );
 
   audioOnlyBtn.addEventListener('click', () =>
     withLock(async () => {
-      state.audioOnly = !state.audioOnly;
-      if (state.audioOnly) {
-        if (state.camOn) await stopCamera();
-        UI.toast('Audio-only mode: video is off for you and others, saving bandwidth.');
-      } else {
-        UI.toast('Video is back on. Turn on your camera when you are ready.');
-      }
-      Peers.setReceiveVideo(!state.audioOnly);
-      state.peers.forEach((_, id) => refreshRemoteVideo(id));
+      await setAudioOnly(!state.audioOnly);
+      UI.toast(
+        state.audioOnly
+          ? 'Audio-only mode: video is off for you and others, saving bandwidth.'
+          : 'Video is back on. Turn on your camera when you are ready.'
+      );
     })
   );
 
-  leaveBtn.addEventListener('click', () => {
+  // ---------- Invite ----------
+
+  async function shareInvite() {
+    const shareData = { title: 'Join my FrameDock call', text: `Join my call on FrameDock (code ${roomCode})`, url: inviteUrl };
+    const isTouch = window.matchMedia('(pointer: coarse)').matches;
+
+    if (isTouch && navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteUrl);
+      UI.toast('Invite link copied to clipboard', { duration: 2500 });
+    } catch {
+      window.prompt('Copy this invite link:', inviteUrl);
+    }
+  }
+
+  document.querySelectorAll('[data-action="invite"]').forEach((btn) => btn.addEventListener('click', shareInvite));
+
+  $('invite-close').addEventListener('click', () => {
+    inviteCard.dataset.dismissed = 'true';
+    refreshInviteCard();
+  });
+
+  // ---------- Leaving ----------
+
+  $('leave-call').addEventListener('click', () => {
     Peers.closeAll();
     Signaling.leaveRoom();
     Media.stopStream(state.localStream);
@@ -194,7 +262,10 @@
 
   // ---------- Signaling events ----------
 
-  Signaling.on('peer-joined', addPeer);
+  Signaling.on('peer-joined', (peer) => {
+    addPeer(peer);
+    UI.toast(`${peer.name} joined`, { duration: 2500 });
+  });
   Signaling.on('peer-left', ({ id }) => removePeer(id));
   Signaling.on('peer-media', ({ id, media }) => {
     const peer = state.peers.get(id);
@@ -205,13 +276,45 @@
   });
   Signaling.on('signal', ({ from, data }) => Peers.handleSignal(from, data));
 
-  // ---------- Startup ----------
+  // ---------- Pre-join ----------
 
-  async function start() {
-    UI.addTile('local', { name: 'Me', isLocal: true });
+  async function loadConfig() {
+    try {
+      const res = await fetch('/config');
+      return await res.json();
+    } catch {
+      return { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    }
+  }
 
+  async function loadRoomStatus() {
+    const statusEl = $('room-status');
+    try {
+      const res = await fetch(`/api/rooms/${roomCode}`);
+      const { count, names, full } = await res.json();
+      if (full) {
+        statusEl.textContent = 'This meeting is full right now.';
+      } else if (count === 0) {
+        statusEl.textContent = 'No one else is here yet.';
+      } else {
+        const others = count - names.length;
+        statusEl.textContent = `${names.join(', ')}${others > 0 ? ` and ${others} more` : ''} ${count === 1 ? 'is' : 'are'} in this call.`;
+      }
+    } catch {
+      statusEl.textContent = '';
+    }
+  }
+
+  function updatePreviewInitials() {
+    $('preview-initials').textContent = UI.initials(nameInput.value || '?');
+  }
+
+  async function preparePreview() {
     if (!Media.isSupported()) {
+      previewStatus.textContent = 'Calls are not supported in this browser';
       UI.toast('This browser does not support calls. Try a recent Chrome, Edge, Firefox or Safari.');
+      $('join-now').disabled = true;
+      $('join-audio').disabled = true;
       return;
     }
 
@@ -222,50 +325,103 @@
     state.localStream.getVideoTracks().forEach((t) => t.addEventListener('ended', () => withLock(stopCamera)));
 
     if (!state.audioOnly && media.videoError) UI.toast(CAMERA_MESSAGES[media.videoError]);
-    else if (media.audioError) UI.toast(MIC_MESSAGES[media.audioError]);
+    if (media.audioError) UI.toast(MIC_MESSAGES[media.audioError]);
 
     refreshLocalPreview();
     refreshControls();
+  }
+
+  async function join({ audioOnly }) {
+    const name = nameInput.value.trim();
+    if (!name) {
+      nameInput.focus();
+      nameInput.reportValidity();
+      return;
+    }
+    try {
+      localStorage.setItem(NAME_KEY, name);
+    } catch {
+      // storage can be unavailable in private mode; the name just won't be remembered
+    }
+
+    state.name = name;
+    $('join-now').disabled = true;
+    $('join-audio').disabled = true;
+    await previewReady;
+
+    if (audioOnly) {
+      state.audioOnly = true;
+      if (state.camOn) await stopCamera();
+    }
 
     const config = await loadConfig();
     Signaling.connect();
+
+    let response;
     try {
-      const { selfId, peers } = await Signaling.joinRoom({
+      response = await Signaling.joinRoom({
         room: roomCode,
-        name: 'Me',
+        name,
         media: { audio: state.micOn, video: state.camOn },
       });
-
-      Peers.init({
-        selfId,
-        iceServers: config.iceServers,
-        localStream: state.localStream,
-        receiveVideo: !state.audioOnly,
-        handlers: {
-          stream: (id, stream) => {
-            const peer = state.peers.get(id);
-            if (!peer) return;
-            peer.stream = stream;
-            UI.setStream(id, stream);
-            refreshRemoteVideo(id);
-          },
-          state: (id, connectionState) => console.debug(`peer ${id}: ${connectionState}`),
-        },
-      });
-
-      // The newcomer starts the connections; existing participants answer.
-      peers.forEach((peer) => {
-        addPeer(peer);
-        Peers.connect(peer.id);
-      });
-      refreshCount();
     } catch (err) {
-      console.error('Could not join room', err);
-      if (err && err.error === 'room-full') {
-        UI.toast(`This meeting is full (max ${err.max} people).`);
-      }
+      $('join-now').disabled = false;
+      $('join-audio').disabled = false;
+      Signaling.socket.disconnect();
+      UI.toast(err && err.error === 'room-full' ? `This meeting is full (max ${err.max} people).` : 'Could not join the meeting. Please try again.');
+      loadRoomStatus();
+      return;
     }
+
+    state.joined = true;
+    prejoin.hidden = true;
+    callScreen.hidden = false;
+    previewVideo.srcObject = null;
+
+    UI.addTile('local', { name, isLocal: true });
+    refreshLocalPreview();
+
+    Peers.init({
+      selfId: response.selfId,
+      iceServers: config.iceServers,
+      localStream: state.localStream,
+      receiveVideo: !state.audioOnly,
+      handlers: {
+        stream: (id, stream) => {
+          const peer = state.peers.get(id);
+          if (!peer) return;
+          peer.stream = stream;
+          UI.setStream(id, stream);
+          refreshRemoteVideo(id);
+        },
+        state: (id, connectionState) => console.debug(`peer ${id}: ${connectionState}`),
+      },
+    });
+
+    // The newcomer starts the connections; existing participants answer.
+    response.peers.forEach((peer) => {
+      addPeer(peer);
+      Peers.connect(peer.id);
+    });
+
+    refreshCount();
+    refreshControls();
+    refreshInviteCard();
   }
 
-  start();
+  $('prejoin-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    join({ audioOnly: state.audioOnly });
+  });
+  $('join-audio').addEventListener('click', () => join({ audioOnly: true }));
+  nameInput.addEventListener('input', updatePreviewInitials);
+
+  try {
+    nameInput.value = localStorage.getItem(NAME_KEY) || '';
+  } catch {
+    nameInput.value = '';
+  }
+  updatePreviewInitials();
+  loadRoomStatus();
+  previewReady = preparePreview();
 })();

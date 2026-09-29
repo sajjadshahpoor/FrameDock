@@ -5,12 +5,17 @@
   const joinBtn = document.getElementById('join-btn');
   const errorText = document.getElementById('join-error');
 
-  function goToRoom(code) {
-    window.location.href = `/room/${code}`;
+  function goToRoom(code, { audioOnly = false } = {}) {
+    window.location.href = `/room/${code}${audioOnly ? '?mode=audio' : ''}`;
   }
 
   newMeetingBtn.addEventListener('click', () => {
     goToRoom(RoomCode.generate());
+  });
+
+  document.getElementById('new-audio-call').addEventListener('click', (event) => {
+    event.preventDefault();
+    goToRoom(RoomCode.generate(), { audioOnly: true });
   });
 
   codeInput.addEventListener('input', () => {
