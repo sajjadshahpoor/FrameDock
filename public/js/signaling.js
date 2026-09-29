@@ -23,6 +23,10 @@ const Signaling = (() => {
     socket.emit('media-state', media);
   }
 
+  function sendChat(text) {
+    socket.emit('chat', { text });
+  }
+
   function leaveRoom() {
     socket.emit('leave-room');
     socket.disconnect();
@@ -32,5 +36,5 @@ const Signaling = (() => {
     socket.on(event, handler);
   }
 
-  return { connect, joinRoom, sendSignal, sendMediaState, leaveRoom, on, socket };
+  return { connect, joinRoom, sendSignal, sendMediaState, sendChat, leaveRoom, on, socket };
 })();

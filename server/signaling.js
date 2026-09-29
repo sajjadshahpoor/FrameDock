@@ -2,6 +2,9 @@ const rooms = require('./rooms');
 
 const ROOM_CODE_PATTERN = /^[a-z]{3}-[a-z]{4}-[a-z]{3}$/;
 const MAX_NAME_LENGTH = 40;
+const MAX_CHAT_LENGTH = 1000;
+const CHAT_WINDOW_MS = 5000;
+const CHAT_MAX_PER_WINDOW = 8;
 
 function cleanName(name) {
   const value = String(name || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME_LENGTH);
@@ -59,6 +62,31 @@ function registerSignaling(io) {
       if (participant) {
         socket.to(currentRoom).emit('peer-media', { id: socket.id, media: participant.media });
       }
+    });
+
+    let chatTimestamps = [];
+
+    socket.on('chat', (payload = {}) => {
+      if (!currentRoom) return;
+      const text = String(payload.text || '').trim().slice(0, MAX_CHAT_LENGTH);
+      if (!text) return;
+
+      // Simple sliding-window rate limit so one client can't flood the room.
+      const now = Date.now();
+      chatTimestamps = chatTimestamps.filter((ts) => now - ts < CHAT_WINDOW_MS);
+      if (chatTimestamps.length >= CHAT_MAX_PER_WINDOW) {
+        socket.emit('chat-error', { error: 'rate-limited' });
+        return;
+      }
+      chatTimestamps.push(now);
+
+      const sender = rooms.getRoom(currentRoom)?.get(socket.id);
+      io.to(currentRoom).emit('chat', {
+        id: socket.id,
+        name: sender ? sender.name : 'Guest',
+        text,
+        ts: now,
+      });
     });
 
     function leave() {

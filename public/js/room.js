@@ -76,6 +76,7 @@
 
     UI.setAudioEnabled('local', state.micOn);
     UI.setVideoEnabled('local', state.camOn);
+    refreshPeople();
   }
 
   function refreshLocalPreview() {
@@ -101,6 +102,15 @@
     if (state.joined) Signaling.sendMediaState({ audio: state.micOn, video: state.camOn });
   }
 
+  function refreshPeople() {
+    if (!state.joined) return;
+    const people = [
+      { name: state.name, isLocal: true, media: { audio: state.micOn, video: state.camOn } },
+      ...Array.from(state.peers.values()).map((peer) => ({ name: peer.name, media: peer.media })),
+    ];
+    Panel.renderPeople(people);
+  }
+
   // ---------- Participants ----------
 
   function addPeer(peer) {
@@ -110,6 +120,7 @@
     UI.setVideoEnabled(peer.id, false);
     refreshCount();
     refreshInviteCard();
+    refreshPeople();
   }
 
   function removePeer(id) {
@@ -119,6 +130,7 @@
     UI.removeTile(id);
     refreshCount();
     refreshInviteCard();
+    refreshPeople();
     if (peer) UI.toast(`${peer.name} left the call`, { duration: 2500 });
   }
 
@@ -273,8 +285,17 @@
     peer.media = media;
     UI.setAudioEnabled(id, media.audio);
     refreshRemoteVideo(id);
+    refreshPeople();
   });
   Signaling.on('signal', ({ from, data }) => Peers.handleSignal(from, data));
+  Signaling.on('chat', (message) => {
+    const seen = Panel.addMessage(message);
+    if (!seen) {
+      const preview = message.text.length > 80 ? `${message.text.slice(0, 80)}...` : message.text;
+      UI.toast(`${message.name}: ${preview}`, { duration: 3500 });
+    }
+  });
+  Signaling.on('chat-error', () => UI.toast('You are sending messages too quickly. Please wait a moment.'));
 
   // ---------- Pre-join ----------
 
@@ -380,6 +401,7 @@
 
     UI.addTile('local', { name, isLocal: true });
     refreshLocalPreview();
+    Panel.init({ selfId: response.selfId, onSend: (text) => Signaling.sendChat(text) });
 
     Peers.init({
       selfId: response.selfId,
