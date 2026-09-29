@@ -1,6 +1,6 @@
 {
   "name": "framedock",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Free, browser-based audio and video calling with shareable room links.",
   "main": "server/index.js",
   "scripts": {
