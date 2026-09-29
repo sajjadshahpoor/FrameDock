@@ -1025,3 +1025,24 @@ svg {
     display: none;
   }
 }
+
+/* ---------- Connection state ---------- */
+
+.tile-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 17, 21, 0.55);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  backdrop-filter: blur(2px);
+}
+
+.offline .call-header::after {
+  content: 'Reconnecting...';
+  color: #fbbf24;
+  font-size: 13px;
+  font-weight: 600;
+}

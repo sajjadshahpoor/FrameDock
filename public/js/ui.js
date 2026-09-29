@@ -77,6 +77,23 @@ const UI = (() => {
     grid.dataset.count = count;
   }
 
+  // message: string shows an overlay, null hides it, undefined leaves it unchanged.
+  function setConnecting(id, message) {
+    const tile = tiles.get(id);
+    if (!tile || message === undefined) return;
+    let overlay = tile.querySelector('.tile-status');
+    if (!message) {
+      overlay?.remove();
+      return;
+    }
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'tile-status';
+      tile.appendChild(overlay);
+    }
+    overlay.textContent = message;
+  }
+
   function setToggleState(button, on, labels) {
     button.setAttribute('aria-pressed', String(on));
     button.classList.toggle('off', !on);
@@ -108,6 +125,7 @@ const UI = (() => {
     setVideoEnabled,
     setAudioEnabled,
     setToggleState,
+    setConnecting,
     updateLayout,
     toast,
     initials,

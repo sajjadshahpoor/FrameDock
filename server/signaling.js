@@ -29,6 +29,15 @@ function registerSignaling(io) {
       if (currentRoom) {
         return reply({ ok: false, error: 'already-joined' });
       }
+
+      // A client rejoining after a network drop can clear out its old, not-yet-timed-out
+      // session so others don't see a duplicate tile. Only allowed within the same room.
+      const previousId = payload.previousId;
+      if (previousId && previousId !== socket.id && rooms.getRoom(code)?.has(previousId)) {
+        rooms.removeParticipant(code, previousId);
+        io.to(code).emit('peer-left', { id: previousId });
+        io.sockets.sockets.get(previousId)?.disconnect(true);
+      }
       if (rooms.isFull(code)) {
         return reply({ ok: false, error: 'room-full', max: rooms.MAX_PARTICIPANTS });
       }

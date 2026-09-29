@@ -11,7 +11,12 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+// Shorter heartbeat than the default so dropped clients leave rooms sooner.
+const io = new Server(server, {
+  pingInterval: 10000,
+  pingTimeout: 8000,
+  maxHttpBufferSize: 1e5, // signaling and chat messages are small
+});
 
 registerSignaling(io);
 

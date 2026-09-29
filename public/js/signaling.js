@@ -6,9 +6,9 @@ const Signaling = (() => {
     if (!socket.connected) socket.connect();
   }
 
-  function joinRoom({ room, name, media }) {
+  function joinRoom({ room, name, media, previousId }) {
     return new Promise((resolve, reject) => {
-      socket.emit('join-room', { room, name, media }, (response) => {
+      socket.emit('join-room', { room, name, media, previousId }, (response) => {
         if (response && response.ok) resolve(response);
         else reject(response || { error: 'unknown' });
       });

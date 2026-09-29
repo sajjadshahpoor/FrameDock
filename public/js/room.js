@@ -20,6 +20,7 @@
   const state = {
     name: '',
     joined: false,
+    config: null,
     localStream: new MediaStream(),
     micOn: false,
     camOn: false,
@@ -118,6 +119,7 @@
     UI.addTile(peer.id, { name: peer.name });
     UI.setAudioEnabled(peer.id, peer.media.audio);
     UI.setVideoEnabled(peer.id, false);
+    UI.setConnecting(peer.id, 'Connecting...');
     refreshCount();
     refreshInviteCard();
     refreshPeople();
@@ -395,17 +397,24 @@
     }
 
     state.joined = true;
+    state.config = config;
     prejoin.hidden = true;
     callScreen.hidden = false;
     previewVideo.srcObject = null;
 
     UI.addTile('local', { name, isLocal: true });
     refreshLocalPreview();
+    startSession(response);
+  }
+
+  // Sets up peer connections for a (re)joined session.
+  function startSession(response) {
+    state.selfId = response.selfId;
     Panel.init({ selfId: response.selfId, onSend: (text) => Signaling.sendChat(text) });
 
     Peers.init({
       selfId: response.selfId,
-      iceServers: config.iceServers,
+      iceServers: state.config.iceServers,
       localStream: state.localStream,
       receiveVideo: !state.audioOnly,
       handlers: {
@@ -416,7 +425,10 @@
           UI.setStream(id, stream);
           refreshRemoteVideo(id);
         },
-        state: (id, connectionState) => console.debug(`peer ${id}: ${connectionState}`),
+        state: (id, connectionState) => {
+          const reconnecting = connectionState === 'disconnected' || connectionState === 'failed';
+          UI.setConnecting(id, reconnecting ? 'Reconnecting...' : connectionState === 'connected' ? null : undefined);
+        },
       },
     });
 
@@ -430,6 +442,46 @@
     refreshControls();
     refreshInviteCard();
   }
+
+  // ---------- Reconnection ----------
+  // If the signaling connection drops, the server forgets us. Once the socket is back,
+  // rejoin with a fresh session and rebuild every peer connection.
+
+  let reconnectToastShown = false;
+  let previousId = null;
+
+  Signaling.on('disconnect', (reason) => {
+    if (!state.joined || reason === 'io client disconnect') return;
+    reconnectToastShown = true;
+    previousId = state.selfId;
+    document.body.classList.add('offline');
+    UI.toast('Connection lost. Trying to reconnect...', { duration: 6000 });
+  });
+
+  Signaling.on('connect', async () => {
+    if (!state.joined || !reconnectToastShown) return;
+    reconnectToastShown = false;
+
+    Peers.closeAll();
+    Array.from(state.peers.keys()).forEach((id) => {
+      state.peers.delete(id);
+      UI.removeTile(id);
+    });
+
+    try {
+      const response = await Signaling.joinRoom({
+        room: roomCode,
+        name: state.name,
+        media: { audio: state.micOn, video: state.camOn },
+        previousId,
+      });
+      document.body.classList.remove('offline');
+      startSession(response);
+      UI.toast('Reconnected', { duration: 2000 });
+    } catch (err) {
+      UI.toast(err && err.error === 'room-full' ? 'Could not rejoin: the meeting is now full.' : 'Could not rejoin the meeting.');
+    }
+  });
 
   $('prejoin-form').addEventListener('submit', (event) => {
     event.preventDefault();
