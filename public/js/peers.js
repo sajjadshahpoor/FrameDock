@@ -7,17 +7,41 @@ const Peers = (() => {
   let selfId = null;
   let iceServers = [];
   let localStream = null;
+  let receiveVideo = true;
   let handlers = {};
 
   function init(options) {
     selfId = options.selfId;
     iceServers = options.iceServers || [];
     localStream = options.localStream || null;
+    receiveVideo = options.receiveVideo !== false;
     handlers = options.handlers || {};
   }
 
   function emit(name, ...args) {
     if (typeof handlers[name] === 'function') handlers[name](...args);
+  }
+
+  function findTransceiver(pc, kind) {
+    return pc.getTransceivers().find(
+      (t) => !t.stopped && t.currentDirection !== 'stopped' && t.receiver.track.kind === kind
+    );
+  }
+
+  function videoDirection(sending) {
+    if (sending && receiveVideo) return 'sendrecv';
+    if (sending) return 'sendonly';
+    if (receiveVideo) return 'recvonly';
+    return 'inactive';
+  }
+
+  // Changing a transceiver's direction triggers renegotiation, which tells the other
+  // side to stop (or resume) sending. This is what actually saves bandwidth.
+  function applyVideoDirection(pc) {
+    const transceiver = findTransceiver(pc, 'video');
+    if (!transceiver) return;
+    const desired = videoDirection(Boolean(transceiver.sender.track));
+    if (transceiver.direction !== desired) transceiver.direction = desired;
   }
 
   function create(id) {
@@ -34,6 +58,7 @@ const Peers = (() => {
     if (localStream) {
       localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
     }
+    applyVideoDirection(pc);
 
     pc.ontrack = ({ track }) => {
       // Build a fresh stream so <video> elements always pick up newly added tracks.
@@ -91,6 +116,7 @@ const Peers = (() => {
         if (description.type === 'offer') {
           await pc.setLocalDescription();
           Signaling.sendSignal(from, { description: pc.localDescription });
+          applyVideoDirection(pc);
         }
       } else if (data.candidate) {
         try {
@@ -104,6 +130,35 @@ const Peers = (() => {
     }
   }
 
+  // Swap the outgoing audio or video track on every connection. Passing null stops sending.
+  async function setTrack(kind, track, stream) {
+    localStream = stream || localStream;
+    const jobs = [];
+
+    for (const { pc } of connections.values()) {
+      const transceiver = findTransceiver(pc, kind);
+      if (transceiver) {
+        jobs.push(
+          transceiver.sender.replaceTrack(track).then(() => {
+            if (track && transceiver.sender.setStreams) transceiver.sender.setStreams(localStream);
+            if (kind === 'video') applyVideoDirection(pc);
+            else if (track && !transceiver.direction.startsWith('send')) transceiver.direction = 'sendrecv';
+          })
+        );
+      } else if (track) {
+        pc.addTrack(track, localStream);
+        if (kind === 'video') applyVideoDirection(pc);
+      }
+    }
+
+    await Promise.allSettled(jobs);
+  }
+
+  function setReceiveVideo(enabled) {
+    receiveVideo = enabled;
+    for (const { pc } of connections.values()) applyVideoDirection(pc);
+  }
+
   function remove(id) {
     const peer = connections.get(id);
     if (!peer) return;
@@ -115,5 +170,5 @@ const Peers = (() => {
     for (const id of connections.keys()) remove(id);
   }
 
-  return { init, connect, handleSignal, remove, closeAll };
+  return { init, connect, handleSignal, setTrack, setReceiveVideo, remove, closeAll };
 })();

@@ -83,6 +83,21 @@ const UI = (() => {
     button.title = on ? labels.on : labels.off;
   }
 
+  function toast(message, { duration = 4500 } = {}) {
+    const container = document.getElementById('toasts');
+    if (!container || !message) return;
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = message;
+    container.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      el.addEventListener('transitionend', () => el.remove(), { once: true });
+      setTimeout(() => el.remove(), 400);
+    }, duration);
+  }
+
   window.addEventListener('resize', updateLayout);
 
   return {
@@ -94,6 +109,7 @@ const UI = (() => {
     setAudioEnabled,
     setToggleState,
     updateLayout,
+    toast,
     get tileCount() {
       return tiles.size;
     },

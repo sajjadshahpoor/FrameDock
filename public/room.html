@@ -18,6 +18,7 @@
         <img src="/img/logo.svg" alt="" width="24" height="24">
       </a>
       <span id="room-code" class="room-code"></span>
+      <span id="audio-only-badge" class="badge" hidden>Audio only</span>
       <span id="participant-count" class="participant-count"></span>
     </header>
 
@@ -37,6 +38,10 @@
           <svg class="icon-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6.5l-4 4V7a1 1 0 0 0-1-1H9.82L21 17.18V6.5zM3.27 2 2 3.27 4.73 6H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12c.21 0 .39-.08.55-.18L19.73 21 21 19.73 3.27 2z"/></svg>
           <span class="sr-only">Camera</span>
         </button>
+        <button id="toggle-audio-only" class="ctrl" type="button" aria-pressed="false" title="Switch to audio-only mode">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9v7a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5v-1a7 7 0 0 1 14 0v1h-2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-7a9 9 0 0 0-9-9z"/></svg>
+          <span class="sr-only">Audio-only mode</span>
+        </button>
         <button id="leave-call" class="ctrl ctrl-danger" type="button" title="Leave call">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85a1 1 0 0 1-1.41-.01L.29 13.08a1 1 0 0 1 0-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67a1 1 0 0 1 0 1.41l-2.48 2.48a1 1 0 0 1-1.41.01 11.3 11.3 0 0 0-2.67-1.85 1 1 0 0 1-.56-.9v-3.1A15 15 0 0 0 12 9z"/></svg>
           <span class="sr-only">Leave</span>
@@ -44,6 +49,8 @@
       </div>
     </footer>
   </div>
+
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
 
   <template id="tile-template">
     <div class="tile video-off">
