@@ -12,6 +12,7 @@
   const previewVideo = $('preview-video');
   const previewStatus = $('preview-status');
   const audioOnlyBtn = $('toggle-audio-only');
+  const screenBtn = $('toggle-screen');
   const countLabel = $('participant-count');
   const inviteCard = $('invite-card');
   const micButtons = document.querySelectorAll('[data-action="mic"]');
@@ -24,6 +25,8 @@
     localStream: new MediaStream(),
     micOn: false,
     camOn: false,
+    sharing: false,
+    camBeforeShare: false,
     audioOnly: params.get('mode') === 'audio',
     busy: false,
     peers: new Map(), // id -> { name, media, stream }
@@ -63,8 +66,14 @@
     micButtons.forEach((btn) => UI.setToggleState(btn, state.micOn, micLabels));
     camButtons.forEach((btn) => {
       UI.setToggleState(btn, state.camOn, camLabels);
-      btn.disabled = state.joined && state.audioOnly;
+      btn.disabled = state.joined && (state.audioOnly || state.sharing);
     });
+
+    screenBtn.classList.toggle('active', state.sharing);
+    screenBtn.setAttribute('aria-pressed', String(state.sharing));
+    screenBtn.title = state.sharing ? 'Stop presenting' : 'Present your screen';
+    screenBtn.disabled = state.audioOnly;
+    UI.setScreen('local', state.sharing);
 
     audioOnlyBtn.classList.toggle('active', state.audioOnly);
     audioOnlyBtn.setAttribute('aria-pressed', String(state.audioOnly));
@@ -76,8 +85,12 @@
     if (!state.camOn) previewStatus.textContent = state.audioOnly ? 'Audio only' : 'Camera is off';
 
     UI.setAudioEnabled('local', state.micOn);
-    UI.setVideoEnabled('local', state.camOn);
+    UI.setVideoEnabled('local', state.camOn || state.sharing);
     refreshPeople();
+  }
+
+  function localMedia() {
+    return { audio: state.micOn, video: state.camOn || state.sharing, screen: state.sharing };
   }
 
   function refreshLocalPreview() {
@@ -93,6 +106,7 @@
     if (!peer) return;
     const hasLiveVideo = Boolean(peer.stream?.getVideoTracks().some((t) => !t.muted));
     UI.setVideoEnabled(id, !state.audioOnly && peer.media.video && hasLiveVideo);
+    UI.setScreen(id, Boolean(peer.media.screen));
   }
 
   function refreshInviteCard() {
@@ -100,13 +114,13 @@
   }
 
   function publishMediaState() {
-    if (state.joined) Signaling.sendMediaState({ audio: state.micOn, video: state.camOn });
+    if (state.joined) Signaling.sendMediaState(localMedia());
   }
 
   function refreshPeople() {
     if (!state.joined) return;
     const people = [
-      { name: state.name, isLocal: true, media: { audio: state.micOn, video: state.camOn } },
+      { name: state.name, isLocal: true, media: localMedia() },
       ...Array.from(state.peers.values()).map((peer) => ({ name: peer.name, media: peer.media })),
     ];
     Panel.renderPeople(people);
@@ -154,16 +168,63 @@
     refreshLocalPreview();
   }
 
-  async function stopCamera() {
-    // Stopping the track (instead of just disabling it) turns the camera light off
-    // and stops sending video entirely, rather than streaming black frames.
+  function removeLocalVideoTracks() {
     state.localStream.getVideoTracks().forEach((track) => {
       track.stop();
       state.localStream.removeTrack(track);
     });
+  }
+
+  async function stopCamera() {
+    // Stopping the track (instead of just disabling it) turns the camera light off
+    // and stops sending video entirely, rather than streaming black frames.
+    removeLocalVideoTracks();
     state.camOn = false;
     await Peers.setTrack('video', null, state.localStream);
     refreshLocalPreview();
+  }
+
+  // ---------- Screen sharing ----------
+  // The screen replaces the camera on the existing video sender, so no extra
+  // connections or renegotiation are needed. The camera comes back afterwards.
+
+  async function startScreenShare() {
+    let track;
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 15, max: 30 } },
+        audio: false,
+      });
+      track = display.getVideoTracks()[0];
+    } catch (err) {
+      if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') UI.toast('Could not share your screen.');
+      return;
+    }
+
+    if ('contentHint' in track) track.contentHint = 'detail'; // favour sharp text over smooth motion
+    state.camBeforeShare = state.camOn;
+    removeLocalVideoTracks();
+    state.camOn = false;
+
+    state.localStream.addTrack(track);
+    state.sharing = true;
+    track.addEventListener('ended', () => withLock(stopScreenShare)); // "Stop sharing" in the browser bar
+    await Peers.setTrack('video', track, state.localStream);
+    refreshLocalPreview();
+    UI.toast('You are presenting to everyone', { duration: 2500 });
+  }
+
+  async function stopScreenShare() {
+    if (!state.sharing) return;
+    removeLocalVideoTracks();
+    state.sharing = false;
+    if (state.camBeforeShare && !state.audioOnly) {
+      await startCamera();
+    }
+    if (!state.camOn) {
+      await Peers.setTrack('video', null, state.localStream);
+      refreshLocalPreview();
+    }
   }
 
   async function startMicrophone() {
@@ -193,6 +254,10 @@
 
   async function setAudioOnly(enabled) {
     state.audioOnly = enabled;
+    if (enabled && state.sharing) {
+      state.camBeforeShare = false;
+      await stopScreenShare();
+    }
     if (enabled && state.camOn) await stopCamera();
     Peers.setReceiveVideo(!enabled);
     state.peers.forEach((_, id) => refreshRemoteVideo(id));
@@ -224,6 +289,17 @@
         }
       })
     )
+  );
+
+  if (!navigator.mediaDevices?.getDisplayMedia || window.matchMedia('(pointer: coarse)').matches) {
+    screenBtn.hidden = true; // phones and tablets can't share their screen from the browser
+  }
+
+  screenBtn.addEventListener('click', () =>
+    withLock(async () => {
+      if (state.sharing) await stopScreenShare();
+      else await startScreenShare();
+    })
   );
 
   audioOnlyBtn.addEventListener('click', () =>
@@ -387,7 +463,7 @@
       response = await Signaling.joinRoom({
         room: roomCode,
         name,
-        media: { audio: state.micOn, video: state.camOn },
+        media: localMedia(),
       });
     } catch (err) {
       $('join-now').disabled = false;
@@ -478,7 +554,7 @@
       const response = await Signaling.joinRoom({
         room: roomCode,
         name: state.name,
-        media: { audio: state.micOn, video: state.camOn },
+        media: localMedia(),
         previousId,
       });
       document.body.classList.remove('offline');

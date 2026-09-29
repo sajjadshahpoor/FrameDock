@@ -1054,3 +1054,14 @@ svg {
 .tile.speaking .avatar-initials {
   box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.35);
 }
+
+/* ---------- Screen sharing ---------- */
+
+.tile.screen video {
+  object-fit: contain;
+  background: #000;
+}
+
+.tile.local.screen video {
+  transform: none;
+}

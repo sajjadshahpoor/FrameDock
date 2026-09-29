@@ -77,6 +77,11 @@ const UI = (() => {
     grid.dataset.count = count;
   }
 
+  function setScreen(id, isScreen) {
+    const tile = tiles.get(id);
+    if (tile) tile.classList.toggle('screen', isScreen);
+  }
+
   function setSpeaking(id, speaking) {
     const tile = tiles.get(id);
     if (tile) tile.classList.toggle('speaking', speaking);
@@ -132,6 +137,7 @@ const UI = (() => {
     setToggleState,
     setConnecting,
     setSpeaking,
+    setScreen,
     updateLayout,
     toast,
     initials,

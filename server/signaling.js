@@ -12,7 +12,7 @@ function cleanName(name) {
 }
 
 function cleanMedia(media = {}) {
-  return { audio: Boolean(media.audio), video: Boolean(media.video) };
+  return { audio: Boolean(media.audio), video: Boolean(media.video), screen: Boolean(media.screen) };
 }
 
 function registerSignaling(io) {
