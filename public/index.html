@@ -3,10 +3,67 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="FrameDock - free audio and video calls in your browser. No sign-up required.">
+  <meta name="theme-color" content="#0f1115">
   <title>FrameDock</title>
+  <link rel="icon" href="/img/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
-<body>
-  <h1>FrameDock</h1>
-  <p>Free audio and video calls in your browser. Coming soon.</p>
+<body class="landing">
+  <header class="topbar">
+    <a class="brand" href="/">
+      <img src="/img/logo.svg" alt="" width="28" height="28">
+      <span>FrameDock</span>
+    </a>
+  </header>
+
+  <main class="hero">
+    <section class="hero-copy">
+      <h1>Calls that just work.<br>Right in your browser.</h1>
+      <p class="lead">
+        Start a free video or audio call and share the link. No accounts, no downloads.
+        Low on bandwidth? Join with audio only.
+      </p>
+
+      <div class="hero-actions">
+        <button id="new-meeting" class="btn btn-primary btn-lg" type="button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+          New meeting
+        </button>
+
+        <form id="join-form" class="join-form" autocomplete="off">
+          <label class="sr-only" for="join-code">Meeting code or link</label>
+          <input id="join-code" class="input" type="text" placeholder="Enter a code or link" inputmode="text" spellcheck="false">
+          <button id="join-btn" class="btn btn-ghost btn-lg" type="submit" disabled>Join</button>
+        </form>
+      </div>
+      <p id="join-error" class="form-error" hidden>That doesn't look like a valid meeting code. Codes look like abc-defg-hij.</p>
+    </section>
+
+    <section class="hero-features" aria-label="Features">
+      <article class="feature">
+        <h2>Video &amp; audio</h2>
+        <p>Peer-to-peer WebRTC calls with HD video when your connection allows it.</p>
+      </article>
+      <article class="feature">
+        <h2>Audio-only mode</h2>
+        <p>Turn your camera off at any time, or join without video to save data.</p>
+      </article>
+      <article class="feature">
+        <h2>Share a link</h2>
+        <p>Every meeting gets a short code. Send the link and people join in one tap.</p>
+      </article>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>FrameDock &middot; free and open source</span>
+  </footer>
+
+  <script src="/js/room-code.js"></script>
+  <script src="/js/landing.js"></script>
 </body>
 </html>
