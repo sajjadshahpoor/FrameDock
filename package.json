@@ -1,0 +1,24 @@
+{
+  "name": "framedock",
+  "version": "0.1.0",
+  "description": "Free, browser-based audio and video calling with shareable room links.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "keywords": [
+    "webrtc",
+    "video-call",
+    "audio-call",
+    "socket.io"
+  ],
+  "author": "Sajjad Shahpoor",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
