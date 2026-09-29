@@ -4,6 +4,7 @@ const express = require('express');
 const { Server } = require('socket.io');
 const { registerSignaling, ROOM_CODE_PATTERN } = require('./signaling');
 const rooms = require('./rooms');
+const { getIceServers } = require('./config');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -18,6 +19,10 @@ app.use(express.static(PUBLIC_DIR));
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', ...rooms.stats() });
+});
+
+app.get('/config', (req, res) => {
+  res.json({ iceServers: getIceServers(), maxParticipants: rooms.MAX_PARTICIPANTS });
 });
 
 app.get('/room/:code', (req, res) => {

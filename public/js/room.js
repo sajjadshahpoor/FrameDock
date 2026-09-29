@@ -41,8 +41,25 @@
 
   function removePeer(id) {
     state.peers.delete(id);
+    Peers.remove(id);
     UI.removeTile(id);
     refreshCount();
+  }
+
+  function refreshRemoteVideo(id) {
+    const peer = state.peers.get(id);
+    if (!peer) return;
+    const hasLiveVideo = Boolean(peer.stream?.getVideoTracks().some((t) => !t.muted));
+    UI.setVideoEnabled(id, peer.media.video && hasLiveVideo);
+  }
+
+  async function loadConfig() {
+    try {
+      const res = await fetch('/config');
+      return await res.json();
+    } catch {
+      return { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+    }
   }
 
   micBtn.addEventListener('click', () => {
@@ -60,6 +77,7 @@
   });
 
   leaveBtn.addEventListener('click', () => {
+    Peers.closeAll();
     Signaling.leaveRoom();
     Media.stopStream(state.localStream);
     window.location.href = '/';
@@ -72,7 +90,9 @@
     if (!peer) return;
     peer.media = media;
     UI.setAudioEnabled(id, media.audio);
+    refreshRemoteVideo(id);
   });
+  Signaling.on('signal', ({ from, data }) => Peers.handleSignal(from, data));
 
   async function start() {
     UI.addTile('local', { name: 'Me', isLocal: true });
@@ -86,14 +106,36 @@
     }
     refreshControls();
 
+    const config = await loadConfig();
     Signaling.connect();
     try {
-      const { peers } = await Signaling.joinRoom({
+      const { selfId, peers } = await Signaling.joinRoom({
         room: roomCode,
         name: 'Me',
         media: { audio: state.micOn, video: state.camOn },
       });
-      peers.forEach(addPeer);
+
+      Peers.init({
+        selfId,
+        iceServers: config.iceServers,
+        localStream: state.localStream,
+        handlers: {
+          stream: (id, stream) => {
+            const peer = state.peers.get(id);
+            if (!peer) return;
+            peer.stream = stream;
+            UI.setStream(id, stream);
+            refreshRemoteVideo(id);
+          },
+          state: (id, connectionState) => console.debug(`peer ${id}: ${connectionState}`),
+        },
+      });
+
+      // The newcomer starts the connections; existing participants answer.
+      peers.forEach((peer) => {
+        addPeer(peer);
+        Peers.connect(peer.id);
+      });
       refreshCount();
     } catch (err) {
       console.error('Could not join room', err);
